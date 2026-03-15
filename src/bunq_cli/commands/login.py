@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import http.server
-import threading
-import urllib.parse
-import webbrowser
 from pathlib import Path
 
 import click
@@ -19,8 +15,7 @@ from bunq_cli.config import (
     set_credentials,
 )
 from bunq_cli.main import Context, pass_context
-
-OAUTH_REDIRECT_PORT = 12345
+from bunq_cli.oauth import oauth_login
 
 
 @click.command()
@@ -36,9 +31,8 @@ def login(ctx: Context, token: str | None, sandbox: bool) -> None:
     sandbox = sandbox or ctx.sandbox
 
     if token is None:
-        token = _oauth_login(sandbox)
-        if token is None:
-            raise click.ClickException("OAuth login failed or was cancelled.")
+        config = load_config(ctx.config_path)
+        token = oauth_login(sandbox=sandbox, config=config)
 
     context_path = str(DEFAULT_CONTEXT_PATH)
     create_context(api_key=token, context_path=Path(context_path), sandbox=sandbox)
@@ -65,12 +59,3 @@ def logout(ctx: Context) -> None:
     save_config(config, ctx.config_path)
     if not ctx.quiet:
         click.echo("Logged out.")
-
-
-def _oauth_login(sandbox: bool) -> str | None:
-    """Run the OAuth browser flow and return the API token, or None on failure."""
-    # TODO: Implement full OAuth flow with bunq SDK's OauthAuthorizationUri
-    # For now, fall back to prompting for a token
-    click.echo("OAuth login is not yet implemented.")
-    click.echo("Please provide an API key using: bunq login --token YOUR_API_KEY")
-    return None

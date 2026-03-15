@@ -93,3 +93,29 @@ def remove_credentials(config: dict) -> dict:
     """Remove stored credentials."""
     config.pop("credentials", None)
     return config
+
+
+def get_oauth_client(config: dict) -> dict:
+    """Get stored OAuth client credentials."""
+    return config.get("oauth", {})
+
+
+def set_oauth_client(
+    config: dict,
+    client_id: str,
+    client_secret: str,
+    oauth_client_id: int,
+) -> dict:
+    """Set OAuth client credentials in config."""
+    config["oauth"] = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "oauth_client_id": oauth_client_id,
+    }
+    return config
+
+
+def remove_oauth_client(config: dict) -> dict:
+    """Remove stored OAuth client credentials."""
+    config.pop("oauth", None)
+    return config

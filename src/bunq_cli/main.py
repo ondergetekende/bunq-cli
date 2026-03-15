@@ -95,6 +95,7 @@ from bunq_cli.commands.payments import payments  # noqa: E402
 from bunq_cli.commands.requests import requests  # noqa: E402
 from bunq_cli.commands.cards import cards  # noqa: E402
 from bunq_cli.commands.callbacks import callbacks  # noqa: E402
+from bunq_cli.commands.oauth_client import oauth_client  # noqa: E402
 
 cli.add_command(login)
 cli.add_command(logout)
@@ -103,3 +104,4 @@ cli.add_command(payments)
 cli.add_command(requests)
 cli.add_command(cards)
 cli.add_command(callbacks)
+cli.add_command(oauth_client)

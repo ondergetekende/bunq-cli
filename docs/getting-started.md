@@ -16,27 +16,65 @@ This installs a `bunq` command in your PATH.
 
 ## Authentication
 
-The recommended way to log in is via OAuth. The CLI opens your browser, you approve access on Bunq's website, and the CLI receives a token automatically:
+### Step 1: Get an API key
+
+You need an API key for initial setup. Open the Bunq app on your phone:
+
+1. Go to **Profile** > **Security & Privacy** > **Developers** > **API keys**.
+2. Create a new API key and copy it.
+
+Log in with it:
+
+```bash
+bunq login --token YOUR_API_KEY
+```
+
+### Step 2: Register an OAuth client
+
+Bunq doesn't have a web portal for OAuth client registration -- it's done via the API. The CLI handles this for you:
+
+```bash
+bunq oauth-client register
+```
+
+This creates an OAuth client, registers the local callback URL, and stores the `client_id` and `client_secret` in `~/.config/bunq-cli.toml`. You can inspect them with:
+
+```bash
+bunq oauth-client show
+```
+
+You only need to do this once. Each Bunq user can have one OAuth client.
+
+### Step 3: Log in with OAuth
+
+From now on, you can log in without an API key:
 
 ```bash
 bunq login
 ```
 
-This starts a temporary local server, opens the Bunq authorization page in your browser, and stores the resulting credentials in `~/.config/bunq-cli.toml`.
+This opens your browser, you approve access on Bunq's website, and the CLI receives a token automatically via a local server on `http://127.0.0.1:12345/callback`.
 
 ### API key (alternative)
 
-If you prefer to use an API key directly (e.g., for scripting or server environments where a browser isn't available):
-
-1. Open the Bunq app on your phone.
-2. Go to **Profile** > **Security & Privacy** > **Developers** > **API keys**.
-3. Create a new API key and reveal it.
+If you prefer to skip OAuth entirely (e.g., for scripting or server environments where a browser isn't available), you can always use an API key directly:
 
 ```bash
-bunq login --token YOUR_API_TOKEN
+bunq login --token YOUR_API_KEY
 ```
 
-API keys are only permitted for private integrations that you control yourself. If you're building a tool for others to use, you must use OAuth.
+API keys are only permitted for private integrations that you control yourself.
+
+### Environment variable override
+
+If you want to override the stored OAuth credentials (e.g., for testing), set these environment variables:
+
+```bash
+export BUNQ_OAUTH_CLIENT_ID="your-client-id"
+export BUNQ_OAUTH_CLIENT_SECRET="your-client-secret"
+```
+
+Environment variables take precedence over the config file.
 
 ### Logging out
 

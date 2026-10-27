@@ -52,6 +52,11 @@ def _list_cards(params: dict[str, str]) -> Any:
     return CardApiObject._from_json_list(fixed, "Card")
 
 
+def _counterparty_name(ref: Any) -> str | None:
+    label = ref.label_monetary_account if ref else None
+    return label.display_name if label else None
+
+
 class BunqApiError(click.ClickException):
     """API error with context."""
 
@@ -259,11 +264,7 @@ class BunqClient:
             "created": payment.created,
             "amount": payment.amount.value if payment.amount else None,
             "currency": payment.amount.currency if payment.amount else None,
-            "counterparty": (
-                payment.counterparty_alias.display_name
-                if payment.counterparty_alias
-                else None
-            ),
+            "counterparty": _counterparty_name(payment.counterparty_alias),
             "description": payment.description,
             "type": payment.type_,
             "balance_after": (
@@ -368,11 +369,7 @@ class BunqClient:
             "updated": req.updated,
             "amount": req.amount_inquired.value if req.amount_inquired else None,
             "currency": req.amount_inquired.currency if req.amount_inquired else None,
-            "counterparty": (
-                req.counterparty_alias.display_name
-                if req.counterparty_alias
-                else None
-            ),
+            "counterparty": _counterparty_name(req.counterparty_alias),
             "description": req.description,
             "status": req.status,
         }
@@ -385,11 +382,7 @@ class BunqClient:
             "updated": req.updated,
             "amount": req.amount_inquired.value if req.amount_inquired else None,
             "currency": req.amount_inquired.currency if req.amount_inquired else None,
-            "counterparty": (
-                req.counterparty_alias.display_name
-                if req.counterparty_alias
-                else None
-            ),
+            "counterparty": _counterparty_name(req.counterparty_alias),
             "description": req.description,
             "status": req.status,
         }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from bunq_cli.main import Context, pass_context
+from bunq_cli.main import Context, pass_context, yes_option
 from bunq_cli.output import echo_output
 
 LIST_COLUMNS = ["id", "created", "amount", "currency", "counterparty", "description", "status"]
@@ -61,7 +61,7 @@ def create_request(
     else:
         raise click.ClickException("Provide --counterparty-email or --counterparty-phone.")
 
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     request_id = client.create_request(
         amount=amount,
         currency=currency,
@@ -80,7 +80,7 @@ def create_request(
 @pass_context
 def revoke_request(ctx: Context, id: int, account_id: int | None) -> None:
     """Revoke a pending payment request."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.revoke_request(id, account_id=account_id)
     if not ctx.quiet:
         click.echo(f"Request {id} revoked.")
@@ -99,10 +99,12 @@ def list_incoming(ctx: Context, account_id: int | None) -> None:
 @requests.command("accept")
 @click.argument("id", type=int)
 @click.option("--account", "account_id", type=int, default=None, help="Monetary account ID.")
+@yes_option
 @pass_context
-def accept_request(ctx: Context, id: int, account_id: int | None) -> None:
-    """Accept an incoming payment request."""
-    client = ctx.get_client()
+def accept_request(ctx: Context, id: int, account_id: int | None, yes: bool) -> None:
+    """Accept (and pay) an incoming payment request."""
+    client = ctx.get_client(write=True)
+    ctx.confirm(f"Accept and pay incoming request {id}?", yes)
     client.accept_request(id, account_id=account_id)
     if not ctx.quiet:
         click.echo(f"Request {id} accepted.")
@@ -114,7 +116,7 @@ def accept_request(ctx: Context, id: int, account_id: int | None) -> None:
 @pass_context
 def reject_request(ctx: Context, id: int, account_id: int | None) -> None:
     """Reject an incoming payment request."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.reject_request(id, account_id=account_id)
     if not ctx.quiet:
         click.echo(f"Request {id} rejected.")

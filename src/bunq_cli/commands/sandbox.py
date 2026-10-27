@@ -14,12 +14,12 @@ def sandbox() -> None:
 
 
 @sandbox.command("create-user")
-@click.option("--login", "do_login", is_flag=True, help="Log in with the new user (replaces your current login).")
+@click.option("--login", "login_profile", metavar="PROFILE", default=None, help="Log in with the new user under this profile name.")
 @click.pass_context
-def create_user(click_ctx: click.Context, do_login: bool) -> None:
+def create_user(click_ctx: click.Context, login_profile: str | None) -> None:
     """Create a sandbox test user and print its API key."""
     api_key = create_sandbox_user()
-    if do_login:
-        click_ctx.invoke(login, token=api_key, sandbox=True)
+    if login_profile:
+        click_ctx.invoke(login, profile_name=login_profile, token=api_key, sandbox=True)
     else:
         click.echo(api_key)

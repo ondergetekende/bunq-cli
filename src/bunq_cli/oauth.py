@@ -159,7 +159,8 @@ def oauth_login(sandbox: bool = False, config: dict | None = None) -> str:
         "client_secret": creds.client_secret,
     }
 
-    response = requests.post(token_url, data=token_params, timeout=30)
+    # bunq only accepts these as query parameters, not as a form body.
+    response = requests.post(token_url, params=token_params, timeout=30)
     if response.status_code != 200:
         try:
             detail = response.json()

@@ -39,7 +39,7 @@ def get_card(ctx: Context, id: int) -> None:
 @pass_context
 def freeze_card(ctx: Context, id: int) -> None:
     """Temporarily freeze a card."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.update_card(id, status="DEACTIVATED")
     if not ctx.quiet:
         click.echo(f"Card {id} frozen.")
@@ -50,7 +50,7 @@ def freeze_card(ctx: Context, id: int) -> None:
 @pass_context
 def unfreeze_card(ctx: Context, id: int) -> None:
     """Unfreeze a frozen card."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.update_card(id, status="ACTIVE")
     if not ctx.quiet:
         click.echo(f"Card {id} unfrozen.")
@@ -91,7 +91,7 @@ def update_card(
             "No updates specified. Use --daily-limit, --atm-limit, --country-permission or --change-pin."
         )
 
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     data = client.update_card(id, **kwargs)
     echo_output(data, fmt=ctx.output_format)
 

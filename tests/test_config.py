@@ -3,15 +3,17 @@
 import stat
 import sys
 
+import click
 import pytest
 
 from bunq_cli.config import (
-    get_credentials,
     load_config,
-    remove_credentials,
+    remove_profile,
+    resolve_profile,
     restrict_permissions,
     save_config,
-    set_credentials,
+    set_profile,
+    validate_profile_name,
 )
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
@@ -42,28 +44,60 @@ def test_load_nonexistent_config(tmp_path):
     assert load_config(path) == {}
 
 
-def test_save_and_load_config(tmp_path):
+def test_save_and_load_profiles(tmp_path):
     path = tmp_path / "config.toml"
-    config = set_credentials({}, "/tmp/bunq.conf", sandbox=False)
+    config = set_profile({}, "acme", context_path="/tmp/acme.conf", sandbox=False, display_name='Acme "B.V."')
+    config = set_profile(config, "jansen", context_path="/tmp/jansen.conf", sandbox=True)
     save_config(config, path)
     loaded = load_config(path)
-    assert loaded["credentials"]["context_path"] == "/tmp/bunq.conf"
-    assert loaded["credentials"]["sandbox"] == False
+    assert loaded["default_profile"] == "acme"
+    assert loaded["profiles"]["acme"]["display_name"] == 'Acme "B.V."'
+    assert loaded["profiles"]["jansen"]["sandbox"] is True
 
 
-def test_save_sandbox_config(tmp_path):
+def test_set_profile_keeps_unset_fields():
+    config = set_profile({}, "acme", context_path="/tmp/a.conf", read_only=True)
+    config = set_profile(config, "acme", context_path="/tmp/a.conf", read_only=None)
+    assert config["profiles"]["acme"]["read_only"] is True
+
+
+def test_migrates_legacy_credentials(tmp_path):
     path = tmp_path / "config.toml"
-    config = set_credentials({}, "/tmp/bunq.conf", sandbox=True)
-    save_config(config, path)
-    loaded = load_config(path)
-    assert loaded["credentials"]["sandbox"] == True
-
-
-def test_remove_credentials():
-    config = set_credentials({}, "/tmp/bunq.conf")
-    config = remove_credentials(config)
+    path.write_text('[credentials]\ncontext_path = "/tmp/bunq.conf"\nsandbox = true\n')
+    config = load_config(path)
     assert "credentials" not in config
+    assert config["default_profile"] == "default"
+    assert config["profiles"]["default"] == {"context_path": "/tmp/bunq.conf", "sandbox": True}
 
 
-def test_get_credentials_empty():
-    assert get_credentials({}) == {}
+def test_resolve_profile():
+    config = set_profile({}, "acme", context_path="a")
+    config = set_profile(config, "jansen", context_path="j")
+    assert resolve_profile(config)[0] == "acme"
+    assert resolve_profile(config, "jansen")[0] == "jansen"
+    with pytest.raises(click.ClickException, match="Unknown profile"):
+        resolve_profile(config, "nope")
+    config = remove_profile(config, "acme")
+    assert resolve_profile(config)[0] == "jansen"  # only one left
+
+
+def test_resolve_profile_ambiguous():
+    config = {"profiles": {"a": {"context_path": "a"}, "b": {"context_path": "b"}}}
+    with pytest.raises(click.ClickException, match="Multiple profiles"):
+        resolve_profile(config)
+
+
+def test_resolve_profile_not_logged_in():
+    with pytest.raises(click.ClickException, match="Not logged in"):
+        resolve_profile({})
+
+
+@pytest.mark.parametrize("name", ["acme", "client_1", "jansen-bv"])
+def test_valid_profile_names(name):
+    assert validate_profile_name(name) == name
+
+
+@pytest.mark.parametrize("name", ["", "a b", "a.b", 'x"'])
+def test_invalid_profile_names(name):
+    with pytest.raises(click.BadParameter):
+        validate_profile_name(name)

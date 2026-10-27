@@ -19,7 +19,7 @@ See [Getting Started](docs/getting-started.md) for full setup instructions, outp
 
 | Guide | What it covers |
 | --- | --- |
-| [Getting Started](docs/getting-started.md) | Installation, authentication, sandbox mode, output formats, pagination, global options |
+| [Getting Started](docs/getting-started.md) | Installation, authentication, profiles (multiple clients), sandbox mode, output formats, pagination, global options |
 | [Accounts](docs/accounts.md) | Monetary accounts: list, get, create savings goals |
 | [Payments](docs/payments.md) | Payments, drafts, scheduled payments, batch payments, international transfers |
 | [Payment Requests](docs/payment-requests.md) | Request money from others, manage incoming requests |

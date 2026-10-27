@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from bunq_cli.main import Context, pass_context
+from bunq_cli.main import Context, pass_context, yes_option
 from bunq_cli.output import echo_output
 
 LIST_COLUMNS = ["id", "category", "notification_target"]
@@ -77,7 +77,7 @@ def create_callback(ctx: Context, url: str, categories: tuple[str, ...]) -> None
     """Create notification filters for one or more event categories."""
     if not url.lower().startswith("https://"):
         raise click.BadParameter("bunq requires an HTTPS callback URL.", param_hint="--url")
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     data = client.create_callback(url, [c.upper() for c in categories])
     if not ctx.quiet:
         click.echo(f"Created {len(categories)} notification filter(s).")
@@ -85,11 +85,12 @@ def create_callback(ctx: Context, url: str, categories: tuple[str, ...]) -> None
 
 
 @callbacks.command("delete")
-@click.confirmation_option(prompt="This will remove ALL notification filters. Continue?")
+@yes_option
 @pass_context
-def delete_callbacks(ctx: Context) -> None:
+def delete_callbacks(ctx: Context, yes: bool) -> None:
     """Remove all notification filters."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
+    ctx.confirm("Remove ALL notification filters?", yes)
     client.delete_all_callbacks()
     if not ctx.quiet:
         click.echo("All notification filters removed.")
@@ -115,7 +116,7 @@ def retry_failures(ctx: Context, ids: tuple[int, ...]) -> None:
     """Retry failed callbacks by failure ID (max 100)."""
     if len(ids) > 100:
         raise click.BadParameter("At most 100 IDs can be retried at once.", param_hint="IDS")
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.retry_callback_failures(list(ids))
     if not ctx.quiet:
         click.echo(f"Retrying {len(ids)} callback(s).")

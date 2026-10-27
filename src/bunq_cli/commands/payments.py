@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from bunq_cli.main import Context, pass_context
+from bunq_cli.main import Context, pass_context, yes_option
 from bunq_cli.output import echo_output
 
 LIST_COLUMNS = ["id", "created", "amount", "currency", "counterparty", "description"]
@@ -62,7 +62,7 @@ def get_payment(ctx: Context, id: int, account_id: int | None) -> None:
 @click.option("--recipient-iban", required=True, help="Recipient IBAN.")
 @click.option("--recipient-name", required=True, help="Recipient name.")
 @click.option("--description", required=True, help="Payment description.")
-@click.confirmation_option(prompt="Are you sure you want to create this payment?")
+@yes_option
 @pass_context
 def create_payment(
     ctx: Context,
@@ -72,9 +72,12 @@ def create_payment(
     recipient_iban: str,
     recipient_name: str,
     description: str,
+    yes: bool,
 ) -> None:
     """Create a payment."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
+    source = f"account {account_id}" if account_id else "the primary account"
+    ctx.confirm(f"Pay {amount} {currency} to {recipient_name} ({recipient_iban}) from {source}?", yes)
     payment_id = client.create_payment(
         amount=amount,
         currency=currency,

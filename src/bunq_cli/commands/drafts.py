@@ -54,7 +54,7 @@ def create_draft(
     description: str,
 ) -> None:
     """Create a draft payment. It is only executed after approval in the bunq app."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     draft_id = client.create_draft_payment(
         amount=amount,
         currency=currency,
@@ -73,7 +73,7 @@ def create_draft(
 @pass_context
 def reject_draft(ctx: Context, id: int, account_id: int | None) -> None:
     """Reject (withdraw) a pending draft payment."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.reject_draft_payment(id, account_id=account_id)
     if not ctx.quiet:
         click.echo(f"Draft payment {id} rejected.")

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import re
 import sys
 from pathlib import Path
+
+import click
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -16,6 +20,8 @@ else:
 
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "bunq-cli.toml"
 DEFAULT_CONTEXT_PATH = Path.home() / ".config" / "bunq-cli.conf"
+CONTEXTS_DIR = Path.home() / ".config" / "bunq-cli" / "contexts"
+PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _serialize_toml(data: dict, prefix: str = "") -> str:
@@ -47,7 +53,8 @@ def _serialize_toml(data: dict, prefix: str = "") -> str:
 
 def _toml_value(value: object) -> str:
     if isinstance(value, str):
-        return f'"{value}"'
+        # JSON string escapes are valid TOML basic-string escapes.
+        return json.dumps(value)
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -61,7 +68,21 @@ def load_config(path: Path | None = None) -> dict:
     if not config_path.exists():
         return {}
     with open(config_path, "rb") as f:
-        return tomllib.load(f)
+        return _migrate(tomllib.load(f))
+
+
+def _migrate(config: dict) -> dict:
+    """Turn the pre-profiles [credentials] section into a 'default' profile."""
+    creds = config.pop("credentials", None)
+    if creds and "profiles" not in config:
+        config["profiles"] = {
+            "default": {
+                "context_path": creds.get("context_path", str(DEFAULT_CONTEXT_PATH)),
+                "sandbox": creds.get("sandbox", False),
+            }
+        }
+        config.setdefault("default_profile", "default")
+    return config
 
 
 def restrict_permissions(path: Path) -> None:
@@ -81,27 +102,53 @@ def save_config(data: dict, path: Path | None = None) -> None:
     config_path.write_text(_serialize_toml(data) + "\n")
 
 
-def get_credentials(config: dict) -> dict:
-    """Get stored credentials."""
-    return config.get("credentials", {})
+def validate_profile_name(name: str) -> str:
+    if not PROFILE_NAME_RE.match(name):
+        raise click.BadParameter(
+            f"Invalid profile name {name!r}: use letters, digits, '-' and '_'."
+        )
+    return name
 
 
-def set_credentials(
-    config: dict,
-    context_path: str,
-    sandbox: bool = False,
-) -> dict:
-    """Set credentials in config."""
-    config["credentials"] = {
-        "context_path": context_path,
-        "sandbox": sandbox,
-    }
+def profile_label(name: str, profile: dict) -> str:
+    display_name = profile.get("display_name")
+    return f"{display_name} ({name})" if display_name else name
+
+
+def resolve_profile(config: dict, name: str | None = None) -> tuple[str, dict]:
+    """Return (name, profile) for the requested, default or only profile."""
+    profiles = config.get("profiles", {})
+    if not profiles:
+        raise click.ClickException("Not logged in. Run 'bunq login' first.")
+    if name is None:
+        name = config.get("default_profile")
+    if name is None and len(profiles) == 1:
+        name = next(iter(profiles))
+    if name is None:
+        raise click.ClickException(
+            "Multiple profiles configured. Pass --profile NAME or run 'bunq profiles use NAME'."
+        )
+    if name not in profiles:
+        raise click.ClickException(
+            f"Unknown profile '{name}'. Run 'bunq profiles list' to see the available profiles."
+        )
+    return name, profiles[name]
+
+
+def set_profile(config: dict, name: str, **fields: object) -> dict:
+    """Create or update a profile; fields set to None are left unchanged."""
+    profile = config.setdefault("profiles", {}).setdefault(name, {})
+    profile.update({k: v for k, v in fields.items() if v is not None})
+    config.setdefault("default_profile", name)
     return config
 
 
-def remove_credentials(config: dict) -> dict:
-    """Remove stored credentials."""
-    config.pop("credentials", None)
+def remove_profile(config: dict, name: str) -> dict:
+    config.get("profiles", {}).pop(name, None)
+    if not config.get("profiles"):
+        config.pop("profiles", None)
+    if config.get("default_profile") == name:
+        config.pop("default_profile")
     return config
 
 
@@ -115,12 +162,14 @@ def set_oauth_client(
     client_id: str,
     client_secret: str,
     oauth_client_id: int,
+    profile: str,
 ) -> dict:
     """Set OAuth client credentials in config."""
     config["oauth"] = {
         "client_id": client_id,
         "client_secret": client_secret,
         "oauth_client_id": oauth_client_id,
+        "profile": profile,
     }
     return config
 

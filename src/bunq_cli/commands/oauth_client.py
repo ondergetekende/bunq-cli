@@ -15,7 +15,7 @@ from bunq_cli.config import (
     save_config,
     set_oauth_client,
 )
-from bunq_cli.main import Context, pass_context
+from bunq_cli.main import Context, pass_context, yes_option
 from bunq_cli.oauth import REDIRECT_URI
 from bunq_cli.output import echo_output
 
@@ -30,10 +30,11 @@ def oauth_client() -> None:
 def register(ctx: Context) -> None:
     """Register a new OAuth client and store its credentials.
 
-    Requires an active session (run 'bunq login --token' first).
+    Requires an active session (run 'bunq login --token' first); the OAuth
+    client is owned by the selected profile's user.
     Automatically adds the CLI callback URL.
     """
-    client = ctx.get_client()  # noqa: F841 -- ensures SDK context is loaded
+    client = ctx.get_client(write=True)  # noqa: F841 -- ensures SDK context is loaded
 
     config = load_config(ctx.config_path)
     existing = get_oauth_client(config)
@@ -56,7 +57,7 @@ def register(ctx: Context) -> None:
     OauthCallbackUrlApiObject.create(oauth_id, url=REDIRECT_URI)
 
     # Persist to config
-    config = set_oauth_client(config, client_id, client_secret, oauth_id)
+    config = set_oauth_client(config, client_id, client_secret, oauth_id, ctx.profile_name)
     save_config(config, ctx.config_path)
 
     if not ctx.quiet:
@@ -82,20 +83,22 @@ def show(ctx: Context) -> None:
         "client_id": oauth["client_id"],
         "client_secret": oauth["client_secret"],
         "callback_url": REDIRECT_URI,
+        "profile": oauth.get("profile", ""),
     }
     echo_output(data, fmt=ctx.output_format)
 
 
 @oauth_client.command("delete")
-@click.confirmation_option(prompt="Are you sure you want to delete the OAuth client?")
+@yes_option
 @pass_context
-def delete(ctx: Context) -> None:
+def delete(ctx: Context, yes: bool) -> None:
     """Delete the OAuth client and remove stored credentials."""
-    client = ctx.get_client()  # noqa: F841 -- ensures SDK context is loaded
-
     config = load_config(ctx.config_path)
     oauth = get_oauth_client(config)
     oauth_id = oauth.get("oauth_client_id")
+    # The OAuth client lives under the user that registered it.
+    client = ctx.get_client(write=True, profile=oauth.get("profile"))  # noqa: F841
+    ctx.confirm("Delete the OAuth client?", yes)
 
     if oauth_id:
         try:

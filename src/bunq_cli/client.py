@@ -101,7 +101,7 @@ def create_context(
     path = str(context_path or DEFAULT_CONTEXT_PATH)
     env = ApiEnvironmentType.SANDBOX if sandbox else ApiEnvironmentType.PRODUCTION
     api_context = ApiContext.create(
-        env, api_key, DEVICE_DESCRIPTION, all_permitted_ip=permitted_ips or ["*"]
+        env, api_key, DEVICE_DESCRIPTION, all_permitted_ip=list(permitted_ips or ["*"])
     )
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     restrict_permissions(Path(path))
@@ -119,6 +119,15 @@ def destroy_context(context_path: Path | None = None) -> None:
         except Exception:
             pass
         path.unlink(missing_ok=True)
+
+
+def current_user_name() -> str | None:
+    """Display name of the user the loaded context acts for (the granting user for OAuth)."""
+    raw = ApiClient(BunqContext.api_context()).get("user", {}, {})
+    user_type, user = next(iter(json.loads(raw.body_bytes)["Response"][0].items()))
+    if user_type == "UserApiKey":
+        user = next(iter(user["granted_by_user"].values()))
+    return user.get("display_name")
 
 
 def create_sandbox_user() -> str:

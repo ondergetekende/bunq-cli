@@ -87,10 +87,57 @@ Environment variables take precedence over the config file.
 ### Logging out
 
 ```bash
-bunq logout
+bunq logout                    # the selected profile
+bunq logout --profile acme
+bunq logout --all
 ```
 
-This removes stored credentials from the config file.
+This closes the session and removes the profile's stored credentials.
+
+## Profiles (multiple clients)
+
+Each login is stored as a named profile, so you can work with several bunq users -- for example one per client. Your first login becomes the `default` profile; once profiles exist, `bunq login` needs `--profile NAME` so it never overwrites another client's login.
+
+```bash
+# Your own account registers the OAuth client once (see above)
+bunq login --profile me --token YOUR_API_KEY
+bunq --profile me oauth-client register
+
+# Each client approves via OAuth (they scan the QR code with their bunq app) ...
+bunq login --profile acme
+# ... or gives you an API key
+bunq login --profile jansen --token THEIR_API_KEY
+
+bunq profiles list             # name, client name, environment, read-only, logged in
+bunq profiles use acme         # set the default profile
+bunq profiles rename jansen jansen-bv
+bunq profiles set acme --read-only   # block commands that change data
+```
+
+Select a profile per command with `--profile`/`-p` or the `BUNQ_PROFILE` environment variable; otherwise the default profile is used. With several profiles and no default, the CLI refuses to guess.
+
+Confirmation prompts show which client you're acting for:
+
+```
+[Acme B.V. (acme)] Pay 750.00 EUR to Landlord B.V. (NL02ABNA0123456789) from the primary account? [y/N]
+```
+
+Pass `--yes` to skip the prompt in scripts.
+
+### Running a command for all clients
+
+`--all-profiles` runs a read-only command for every profile and merges the results, adding a `profile` column:
+
+```bash
+bunq --all-profiles accounts list
+bunq --all-profiles --output json payments list --count 10
+bunq --all-profiles statements create --from 2026-01-01 --to 2026-03-31
+bunq --all-profiles statements download 123 -o "statements/{profile}.csv"
+```
+
+Commands that change data (payments, cards, callbacks, ...) are refused. A failure for one client is reported on stderr and doesn't stop the others; the exit code is 1 if any profile failed.
+
+Accessing other bunq users' data is subject to bunq's API terms and may require a PSD2 license; check this before using the CLI for clients.
 
 ## Sandbox mode
 
@@ -103,10 +150,10 @@ bunq login --token YOUR_SANDBOX_TOKEN --sandbox
 
 Sandbox mode uses the `https://public-api.sandbox.bunq.com` endpoint instead of production.
 
-Create a sandbox test user and log in with it in one go (this replaces your current login):
+Create a sandbox test user and log in with it as a new profile:
 
 ```bash
-bunq sandbox create-user --login
+bunq sandbox create-user --login sandbox-test
 ```
 
 Without `--login` the new user's API key is printed. To get sandbox money, request it from bunq's test account:

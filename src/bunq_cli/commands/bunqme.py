@@ -52,7 +52,7 @@ def create_tab(
     redirect_url: str | None,
 ) -> None:
     """Create a bunq.me payment link."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     data = client.create_bunqme_tab(
         amount=amount,
         currency=currency,
@@ -69,7 +69,7 @@ def create_tab(
 @pass_context
 def cancel_tab(ctx: Context, id: int, account_id: int | None) -> None:
     """Cancel a bunq.me payment link."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.cancel_bunqme_tab(id, account_id=account_id)
     if not ctx.quiet:
         click.echo(f"bunq.me link {id} cancelled.")

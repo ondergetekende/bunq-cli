@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import click
 
-from bunq_cli.main import Context, pass_context
+from bunq_cli.main import Context, pass_context, yes_option
 from bunq_cli.output import echo_output
 
 LIST_COLUMNS = ["id", "status", "amount", "currency", "counterparty", "description", "every", "next"]
@@ -56,7 +56,7 @@ def get_scheduled(ctx: Context, id: int, account_id: int | None) -> None:
 @click.option("--end-date", "end", type=click.DateTime(DATETIME_FORMATS), default=None, help="Stop after this date (optional).")
 @click.option("--frequency", "unit", type=click.Choice(UNITS, case_sensitive=False), default="ONCE", help="How often to pay (default: ONCE).")
 @click.option("--every", type=click.IntRange(min=1), default=1, help="Repeat every N periods, e.g. --every 2 --frequency WEEKLY.")
-@click.confirmation_option(prompt="Are you sure you want to schedule this payment?")
+@yes_option
 @pass_context
 def create_scheduled(
     ctx: Context,
@@ -70,9 +70,16 @@ def create_scheduled(
     end: datetime | None,
     unit: str,
     every: int,
+    yes: bool,
 ) -> None:
     """Schedule a (recurring) payment."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
+    source = f"account {account_id}" if account_id else "the primary account"
+    ctx.confirm(
+        f"Schedule {amount} {currency} to {recipient_name} ({recipient_iban}) from {source}, "
+        f"starting {start:%Y-%m-%d %H:%M}, {unit.upper()}?",
+        yes,
+    )
     schedule_id = client.create_scheduled_payment(
         amount=amount,
         currency=currency,
@@ -95,7 +102,7 @@ def create_scheduled(
 @pass_context
 def cancel_scheduled(ctx: Context, id: int, account_id: int | None) -> None:
     """Cancel a scheduled payment."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.cancel_scheduled_payment(id, account_id=account_id)
     if not ctx.quiet:
         click.echo(f"Scheduled payment {id} cancelled.")

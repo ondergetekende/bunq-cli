@@ -76,6 +76,10 @@ def create_statement(
 def download_statement(ctx: Context, id: int, account_id: int | None, output_file: Path) -> None:
     """Download a statement export."""
     client = ctx.get_client()
+    if ctx.all_profiles:
+        if "{profile}" not in str(output_file):
+            raise click.UsageError("With --all-profiles, put {profile} in the output file name.")
+        output_file = Path(str(output_file).replace("{profile}", ctx.profile_name))
     output_file.write_bytes(client.download_statement(id, account_id=account_id))
     if not ctx.quiet:
         click.echo(f"Statement saved to {output_file}.")
@@ -87,7 +91,7 @@ def download_statement(ctx: Context, id: int, account_id: int | None, output_fil
 @pass_context
 def delete_statement(ctx: Context, id: int, account_id: int | None) -> None:
     """Delete a statement export."""
-    client = ctx.get_client()
+    client = ctx.get_client(write=True)
     client.delete_statement(id, account_id=account_id)
     if not ctx.quiet:
         click.echo(f"Statement {id} deleted.")

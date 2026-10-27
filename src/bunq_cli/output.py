@@ -46,8 +46,20 @@ def echo_output(
     fmt: str = "auto",
     columns: list[str] | None = None,
 ) -> None:
-    """Format and print data."""
+    """Format and print data (or hand it to --all-profiles for merging)."""
     if data is None:
+        return
+    collected = _collected()
+    if collected is not None:
+        collected.append((data, columns))
         return
     output = format_output(data, fmt=fmt, columns=columns)
     click.echo(output)
+
+
+def _collected() -> list | None:
+    from bunq_cli.main import Context
+
+    click_ctx = click.get_current_context(silent=True)
+    obj = click_ctx.find_object(Context) if click_ctx else None
+    return getattr(obj, "collected", None)

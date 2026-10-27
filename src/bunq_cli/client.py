@@ -30,7 +30,7 @@ from bunq.sdk.model.generated.object_ import (
     PointerObject,
 )
 
-from bunq_cli.config import DEFAULT_CONTEXT_PATH
+from bunq_cli.config import DEFAULT_CONTEXT_PATH, restrict_permissions
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,7 @@ def _ensure_context(
         ) from exc
 
     if api_context.ensure_session_active():
+        restrict_permissions(Path(path))
         api_context.save(path)
 
     BunqContext.load_api_context(api_context)
@@ -95,6 +96,8 @@ def create_context(
     path = str(context_path or DEFAULT_CONTEXT_PATH)
     env = ApiEnvironmentType.SANDBOX if sandbox else ApiEnvironmentType.PRODUCTION
     api_context = ApiContext.create(env, api_key, DEVICE_DESCRIPTION)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    restrict_permissions(Path(path))
     api_context.save(path)
     BunqContext.load_api_context(api_context)
 

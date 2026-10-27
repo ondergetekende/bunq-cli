@@ -20,13 +20,17 @@ bunq callbacks create \
 
 | Category | Events |
 |---|---|
-| `MUTATION` | Payments, transfers, and other balance changes |
+| `MUTATION` | Any balance change (payments, requests, iDEAL, etc.) |
 | `PAYMENT` | Incoming and outgoing payments |
+| `INSTANT_PAYMENT` | Instant (SCT Inst) payments |
 | `REQUEST` | Payment request updates |
 | `CARD_TRANSACTION_SUCCESSFUL` | Successful card transactions |
 | `CARD_TRANSACTION_FAILED` | Declined card transactions |
 | `SCHEDULE_STATUS` | Scheduled payment status changes |
 | `BUNQME_TAB` | bunq.me request updates |
+| `OAUTH` | OAuth connection revoked |
+
+Run `bunq callbacks create --help` for the full list. The URL must use HTTPS. New filters are added to the existing ones.
 
 Subscribe to multiple categories:
 
@@ -37,8 +41,10 @@ bunq callbacks create \
   --category CARD_TRANSACTION_SUCCESSFUL
 ```
 
-## Deleting a callback
+## Deleting callbacks
+
+Removes all notification filters:
 
 ```bash
-bunq callbacks delete 12345
+bunq callbacks delete
 ```

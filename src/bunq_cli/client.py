@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ import click
 from bunq.sdk.context.api_context import ApiContext
 from bunq.sdk.context.api_environment_type import ApiEnvironmentType
 from bunq.sdk.context.bunq_context import BunqContext
+from bunq.sdk.http.api_client import ApiClient
+from bunq.sdk.http.bunq_response_raw import BunqResponseRaw
 from bunq.sdk.http.pagination import Pagination
 from bunq.sdk.model.generated.endpoint import (
     CardApiObject,
@@ -30,6 +33,23 @@ from bunq_cli.config import DEFAULT_CONTEXT_PATH
 logger = logging.getLogger(__name__)
 
 DEVICE_DESCRIPTION = "bunq-cli"
+
+
+def _list_cards(params: dict[str, str]) -> Any:
+    """Like CardApiObject.list, but accepts CardDebit/CardCredit/... list items.
+
+    The SDK's list parser only accepts items wrapped as "Card".
+    """
+    api_client = ApiClient(CardApiObject._get_api_context())
+    url = CardApiObject._ENDPOINT_URL_LISTING.format(CardApiObject._determine_user_id())
+    raw = api_client.get(url, params, {})
+    body = json.loads(raw.body_bytes)
+    body["Response"] = [
+        {"Card": next(v for k, v in item.items() if k.startswith("Card"))}
+        for item in body["Response"]
+    ]
+    fixed = BunqResponseRaw(json.dumps(body).encode(), raw.headers)
+    return CardApiObject._from_json_list(fixed, "Card")
 
 
 class BunqApiError(click.ClickException):
@@ -131,12 +151,13 @@ class BunqClient:
             "MonetaryAccountExternalSavings",
             "MonetaryAccountInvestment",
             "MonetaryAccountCard",
+            "MonetaryAccountSwitchService",
         ):
             obj = getattr(account, attr, None)
             if obj is not None:
                 iban = ""
-                if obj.alias_:
-                    for alias in obj.alias_:
+                if obj.alias:
+                    for alias in obj.alias:
                         if alias.type_ == "IBAN":
                             iban = alias.value
                             break
@@ -144,7 +165,8 @@ class BunqClient:
                     "id": obj.id_,
                     "description": obj.description,
                     "type": attr.replace("MonetaryAccount", ""),
-                    "currency": obj.currency,
+                    "currency": getattr(obj, "currency", None)
+                    or (obj.balance.currency if obj.balance else None),
                     "balance": obj.balance.value if obj.balance else None,
                     "iban": iban,
                     "status": obj.status,
@@ -379,7 +401,7 @@ class BunqClient:
         self._log("GET card (list)")
         pagination = Pagination()
         pagination.count = 100
-        response = CardApiObject.list(params=pagination.url_params_count_only)
+        response = _list_cards(pagination.url_params_count_only)
         return [self._card_to_dict(c) for c in response.value]
 
     def get_card(self, card_id: int) -> dict:
@@ -414,13 +436,25 @@ class BunqClient:
         """List notification filters."""
         self._log("GET notification-filter-url (list)")
         response = NotificationFilterUrlApiObject.list()
-        return [self._callback_to_dict(f) for f in response.value]
+        return [
+            self._callback_to_dict(f)
+            for item in response.value
+            for f in (item.notification_filters or [])
+        ]
 
     def create_callback(self, url: str, categories: list[str]) -> list[dict]:
-        """Create notification filters for the given categories."""
+        """Add notification filters for the given categories."""
         self._log(f"POST notification-filter-url categories={categories}")
+        # POST replaces the full set of filters, so keep the existing ones.
         filters = [
-            NotificationFilterUrlObject(category, url) for category in categories
+            NotificationFilterUrlObject(f["category"], f["notification_target"])
+            for f in self.list_callbacks()
+        ]
+        existing = {(f.category, f.notification_target) for f in filters}
+        filters += [
+            NotificationFilterUrlObject(category, url)
+            for category in categories
+            if (category, url) not in existing
         ]
         NotificationFilterUrlApiObject.create(notification_filters=filters)
         return self.list_callbacks()
@@ -433,7 +467,7 @@ class BunqClient:
     @staticmethod
     def _callback_to_dict(f: Any) -> dict:
         return {
-            "id": f.id_ if hasattr(f, "id_") else None,
+            "id": getattr(f, "id_", None),
             "category": f.category,
             "notification_target": f.notification_target,
         }

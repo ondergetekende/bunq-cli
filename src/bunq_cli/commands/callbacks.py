@@ -10,22 +10,41 @@ from bunq_cli.output import echo_output
 LIST_COLUMNS = ["id", "category", "notification_target"]
 
 CATEGORIES = [
-    "BILLING",
-    "CARD_TRANSACTION_SUCCESSFUL",
-    "CARD_TRANSACTION_FAILED",
-    "CHAT",
-    "DRAFT_PAYMENT",
-    "IDEAL",
-    "SOFORT",
     "MUTATION",
     "PAYMENT",
+    "INSTANT_PAYMENT",
+    "PAYMENT_DELAYED",
+    "PAYMENT_SUSPENDED",
+    "PAYMENT_UPDATED",
+    "DRAFT_PAYMENT",
     "REQUEST",
     "SCHEDULE_RESULT",
     "SCHEDULE_STATUS",
-    "SHARE",
+    "IDEAL",
+    "SOFORT",
+    "CARD_TRANSACTION_SUCCESSFUL",
+    "CARD_TRANSACTION_FAILED",
+    "CARD_TRANSACTION_UPDATED",
+    "CARD_TRANSACTION_REFUND",
+    "CARD_TRANSACTION_TOKENIZED",
+    "CARD_DYNAMIC_CURRENCY_CONVERSION_WARNING",
+    "CARD_EXPIRY",
+    "CARD_REPLACEMENT",
+    "CARD_COUNTRY_PERMISSION",
+    "CARD_TOKENIZATION",
+    "MASTERCARD_IDENTITY_CHECK",
+    "MONETARY_ACCOUNT_BALANCE",
+    "MONETARY_ACCOUNT_JOINT",
+    "CO_OWNER_INVITE",
+    "APPROVAL_REQUEST_USER",
+    "APPROVAL_REQUEST_MONETARY_ACCOUNT",
+    "WHITELIST",
+    "WHITELIST_RESULT",
     "TAB_RESULT",
     "BUNQME_TAB",
-    "SUPPORT",
+    "BUNQME_TAB_RESULT_INQUIRY",
+    "BUNQME_TAB_RESULT_RESPONSE",
+    "OAUTH",
 ]
 
 
@@ -56,8 +75,10 @@ def list_callbacks(ctx: Context) -> None:
 @pass_context
 def create_callback(ctx: Context, url: str, categories: tuple[str, ...]) -> None:
     """Create notification filters for one or more event categories."""
+    if not url.lower().startswith("https://"):
+        raise click.BadParameter("bunq requires an HTTPS callback URL.", param_hint="--url")
     client = ctx.get_client()
-    data = client.create_callback(url, list(categories))
+    data = client.create_callback(url, [c.upper() for c in categories])
     if not ctx.quiet:
         click.echo(f"Created {len(categories)} notification filter(s).")
     echo_output(data, fmt=ctx.output_format, columns=LIST_COLUMNS)

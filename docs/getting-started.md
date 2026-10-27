@@ -65,6 +65,14 @@ bunq login --token YOUR_API_KEY
 
 API keys are only permitted for private integrations that you control yourself.
 
+### Allowed IP addresses
+
+bunq invalidates a new API key if it isn't assigned to an IP address within 4 hours. `bunq login` does this when it registers the device. By default (`*`) bunq assigns the IP you log in from, or allows any IP if you created a wildcard API key in the app. To restrict the key to specific addresses:
+
+```bash
+bunq login --token YOUR_API_KEY --allowed-ip 203.0.113.10 --allowed-ip 2001:db8::1
+```
+
 ### Environment variable override
 
 If you want to override the stored OAuth credentials (e.g., for testing), set these environment variables:

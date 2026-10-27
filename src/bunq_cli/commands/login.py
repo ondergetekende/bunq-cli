@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from pathlib import Path
 
 import click
@@ -18,11 +19,31 @@ from bunq_cli.main import Context, pass_context
 from bunq_cli.oauth import oauth_login
 
 
+def _validate_ips(ctx: click.Context, param: click.Parameter, value: tuple[str, ...]) -> list[str]:
+    for ip in value:
+        if ip != "*":
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                raise click.BadParameter(f"{ip!r} is not an IP address or '*'.") from None
+    return list(value)
+
+
 @click.command()
 @click.option("--token", default=None, help="API key (skip OAuth and use this token directly).")
 @click.option("--sandbox", is_flag=True, help="Use the sandbox environment.")
+@click.option(
+    "--allowed-ip",
+    "allowed_ips",
+    multiple=True,
+    default=["*"],
+    show_default=True,
+    callback=_validate_ips,
+    help="IP address the API key may be used from (repeatable). With '*', bunq assigns "
+    "the IP you log in from, or allows any IP for wildcard API keys.",
+)
 @pass_context
-def login(ctx: Context, token: str | None, sandbox: bool) -> None:
+def login(ctx: Context, token: str | None, sandbox: bool, allowed_ips: list[str]) -> None:
     """Log in to your Bunq account.
 
     Without --token, opens your browser for OAuth authorization.
@@ -35,7 +56,12 @@ def login(ctx: Context, token: str | None, sandbox: bool) -> None:
         token = oauth_login(sandbox=sandbox, config=config)
 
     context_path = str(DEFAULT_CONTEXT_PATH)
-    create_context(api_key=token, context_path=Path(context_path), sandbox=sandbox)
+    create_context(
+        api_key=token,
+        context_path=Path(context_path),
+        sandbox=sandbox,
+        permitted_ips=allowed_ips,
+    )
 
     config = load_config(ctx.config_path)
     config = set_credentials(config, context_path=context_path, sandbox=sandbox)

@@ -91,11 +91,18 @@ def create_context(
     api_key: str,
     context_path: Path | None = None,
     sandbox: bool = False,
+    permitted_ips: list[str] | None = None,
 ) -> None:
-    """Create a new API context (device registration + session)."""
+    """Create a new API context (device registration + session).
+
+    bunq invalidates API keys not assigned to an IP within 4 hours; the
+    device registration assigns them to ``permitted_ips`` (default ``*``).
+    """
     path = str(context_path or DEFAULT_CONTEXT_PATH)
     env = ApiEnvironmentType.SANDBOX if sandbox else ApiEnvironmentType.PRODUCTION
-    api_context = ApiContext.create(env, api_key, DEVICE_DESCRIPTION)
+    api_context = ApiContext.create(
+        env, api_key, DEVICE_DESCRIPTION, all_permitted_ip=permitted_ips or ["*"]
+    )
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     restrict_permissions(Path(path))
     api_context.save(path)

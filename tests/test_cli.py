@@ -60,6 +60,12 @@ def test_new_groups_help(cli_runner, group):
     assert result.exit_code == 0
 
 
+def test_login_rejects_invalid_ip(cli_runner):
+    result = cli_runner("login", "--token", "x", "--allowed-ip", "not-an-ip")
+    assert result.exit_code != 0
+    assert "not an IP address" in result.output
+
+
 def test_card_update_requires_option(cli_runner):
     result = cli_runner("cards", "update", "1")
     assert result.exit_code != 0

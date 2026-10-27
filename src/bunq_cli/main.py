@@ -96,6 +96,12 @@ from bunq_cli.commands.requests import requests  # noqa: E402
 from bunq_cli.commands.cards import cards  # noqa: E402
 from bunq_cli.commands.callbacks import callbacks  # noqa: E402
 from bunq_cli.commands.oauth_client import oauth_client  # noqa: E402
+from bunq_cli.commands.events import events  # noqa: E402
+from bunq_cli.commands.statements import statements  # noqa: E402
+from bunq_cli.commands.scheduled import scheduled  # noqa: E402
+from bunq_cli.commands.drafts import drafts  # noqa: E402
+from bunq_cli.commands.bunqme import bunqme  # noqa: E402
+from bunq_cli.commands.sandbox import sandbox  # noqa: E402
 
 cli.add_command(login)
 cli.add_command(logout)
@@ -105,3 +111,9 @@ cli.add_command(requests)
 cli.add_command(cards)
 cli.add_command(callbacks)
 cli.add_command(oauth_client)
+cli.add_command(events)
+cli.add_command(statements)
+cli.add_command(scheduled)
+cli.add_command(drafts)
+cli.add_command(bunqme)
+cli.add_command(sandbox)

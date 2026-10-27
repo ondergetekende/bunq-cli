@@ -48,3 +48,12 @@ Removes all notification filters:
 ```bash
 bunq callbacks delete
 ```
+
+## Failed callbacks
+
+bunq retries a failed callback 5 times, one minute apart. After that it is stored as a failure, which you can list and retry:
+
+```bash
+bunq callbacks failures
+bunq callbacks retry 101 102 103
+```

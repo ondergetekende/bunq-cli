@@ -95,6 +95,18 @@ bunq login --token YOUR_SANDBOX_TOKEN --sandbox
 
 Sandbox mode uses the `https://public-api.sandbox.bunq.com` endpoint instead of production.
 
+Create a sandbox test user and log in with it in one go (this replaces your current login):
+
+```bash
+bunq sandbox create-user --login
+```
+
+Without `--login` the new user's API key is printed. To get sandbox money, request it from bunq's test account:
+
+```bash
+bunq requests create --counterparty-email sugardaddy@bunq.com --amount 500.00 --description "Sandbox money"
+```
+
 ## Output formats
 
 By default the CLI prints tables when you're in a terminal, and JSON when output is piped:

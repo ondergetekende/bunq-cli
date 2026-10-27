@@ -59,17 +59,64 @@ def unfreeze_card(ctx: Context, id: int) -> None:
 @cards.command("update")
 @click.argument("id", type=int)
 @click.option("--daily-limit", type=float, default=None, help="Daily spending limit (e.g., 500.00).")
+@click.option("--atm-limit", type=float, default=None, help="Daily ATM withdrawal limit (e.g., 250.00).")
+@click.option("--country-permission", "countries", multiple=True, help="Country code the card may be used in (repeatable, replaces the current list).")
+@click.option("--change-pin", is_flag=True, help="Prompt for a new PIN code.")
 @pass_context
-def update_card(ctx: Context, id: int, daily_limit: float | None) -> None:
+def update_card(
+    ctx: Context,
+    id: int,
+    daily_limit: float | None,
+    atm_limit: float | None,
+    countries: tuple[str, ...],
+    change_pin: bool,
+) -> None:
     """Update card settings."""
+    from bunq.sdk.model.generated.object_ import AmountObject, CardCountryPermissionObject
+
     kwargs = {}
     if daily_limit is not None:
-        from bunq.sdk.model.generated.object_ import AmountObject
         kwargs["card_limit"] = AmountObject(f"{daily_limit:.2f}", "EUR")
+    if atm_limit is not None:
+        kwargs["card_limit_atm"] = AmountObject(f"{atm_limit:.2f}", "EUR")
+    if countries:
+        kwargs["country_permission"] = [
+            CardCountryPermissionObject(country=c.upper()) for c in countries
+        ]
+    if change_pin:
+        kwargs["pin_code"] = click.prompt("New PIN", hide_input=True, confirmation_prompt=True)
 
     if not kwargs:
-        raise click.ClickException("No updates specified. Use --daily-limit.")
+        raise click.ClickException(
+            "No updates specified. Use --daily-limit, --atm-limit, --country-permission or --change-pin."
+        )
 
     client = ctx.get_client()
     data = client.update_card(id, **kwargs)
+    echo_output(data, fmt=ctx.output_format)
+
+
+TRANSACTION_COLUMNS = ["id", "created", "amount", "currency", "merchant", "card_id", "decision", "status"]
+
+
+@cards.command("transactions")
+@click.option("--account", "account_id", type=int, default=None, help="Monetary account ID (default: primary).")
+@click.option("--count", type=int, default=25, help="Number of results.")
+@click.option("--older-id", type=int, default=None, help="Cursor: fetch results older than this ID.")
+@pass_context
+def list_transactions(ctx: Context, account_id: int | None, count: int, older_id: int | None) -> None:
+    """List card transactions (authorisations, declines, refunds)."""
+    client = ctx.get_client()
+    data = client.list_card_transactions(account_id=account_id, count=count, older_id=older_id)
+    echo_output(data, fmt=ctx.output_format, columns=TRANSACTION_COLUMNS)
+
+
+@cards.command("transaction")
+@click.argument("id", type=int)
+@click.option("--account", "account_id", type=int, default=None, help="Monetary account ID (default: primary).")
+@pass_context
+def get_transaction(ctx: Context, id: int, account_id: int | None) -> None:
+    """Get a single card transaction."""
+    client = ctx.get_client()
+    data = client.get_card_transaction(id, account_id=account_id)
     echo_output(data, fmt=ctx.output_format)

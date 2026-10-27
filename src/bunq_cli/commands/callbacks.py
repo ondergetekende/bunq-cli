@@ -93,3 +93,29 @@ def delete_callbacks(ctx: Context) -> None:
     client.delete_all_callbacks()
     if not ctx.quiet:
         click.echo("All notification filters removed.")
+
+
+@callbacks.command("failures")
+@pass_context
+def list_failures(ctx: Context) -> None:
+    """List callbacks that failed after all retries."""
+    client = ctx.get_client()
+    data = client.list_callback_failures()
+    echo_output(
+        data,
+        fmt=ctx.output_format,
+        columns=["id", "created", "category", "event_type", "object_id", "response_code"],
+    )
+
+
+@callbacks.command("retry")
+@click.argument("ids", type=int, nargs=-1, required=True)
+@pass_context
+def retry_failures(ctx: Context, ids: tuple[int, ...]) -> None:
+    """Retry failed callbacks by failure ID (max 100)."""
+    if len(ids) > 100:
+        raise click.BadParameter("At most 100 IDs can be retried at once.", param_hint="IDS")
+    client = ctx.get_client()
+    client.retry_callback_failures(list(ids))
+    if not ctx.quiet:
+        click.echo(f"Retrying {len(ids)} callback(s).")

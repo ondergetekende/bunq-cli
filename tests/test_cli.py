@@ -1,5 +1,11 @@
 """Tests for CLI basics."""
 
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from bunq_cli.client import BunqClient
+from bunq_cli.commands.scheduled import _to_api_time
 from bunq_cli.main import cli
 
 
@@ -43,3 +49,55 @@ def test_callbacks_help(cli_runner):
     result = cli_runner("callbacks", "--help")
     assert result.exit_code == 0
     assert "notification" in result.output.lower()
+
+
+@pytest.mark.parametrize(
+    "group",
+    ["events", "statements", "scheduled-payments", "draft-payments", "bunqme", "sandbox"],
+)
+def test_new_groups_help(cli_runner, group):
+    result = cli_runner(group, "--help")
+    assert result.exit_code == 0
+
+
+def test_card_update_requires_option(cli_runner):
+    result = cli_runner("cards", "update", "1")
+    assert result.exit_code != 0
+    assert "No updates specified" in result.output
+
+
+def test_callback_retry_limit(cli_runner):
+    result = cli_runner("callbacks", "retry", *map(str, range(101)))
+    assert result.exit_code != 0
+    assert "100" in result.output
+
+
+def test_scheduled_payment_to_dict():
+    data = BunqClient._scheduled_payment_to_dict(
+        {
+            "id": 1,
+            "status": "ACTIVE",
+            "payment": {
+                "amount": {"value": "-1.00", "currency": "EUR"},
+                "counterparty_alias": {"display_name": "Landlord"},
+                "description": "Rent",
+            },
+            "schedule": {"recurrence_unit": "MONTHLY", "recurrence_size": 1, "time_next": "2026-11-01"},
+        }
+    )
+    assert data["counterparty"] == "Landlord"
+    assert data["every"] == "1 MONTHLY"
+    assert data["next"] == "2026-11-01"
+
+
+def test_event_to_dict():
+    data = BunqClient._event_to_dict(
+        {"id": 5, "action": "CREATE", "object": {"Payment": {"id": 9}}, "monetary_account_id": "3"}
+    )
+    assert data["object_type"] == "Payment"
+    assert data["object_id"] == 9
+
+
+def test_to_api_time_is_utc():
+    value = datetime(2026, 1, 1, 12, 0, tzinfo=timezone(timedelta(hours=1)))
+    assert _to_api_time(value) == "2026-01-01 11:00:00"

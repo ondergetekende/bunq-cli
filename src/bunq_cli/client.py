@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from pathlib import Path
 from typing import Any
 
 import click
+import requests
 from bunq.sdk.context.api_context import ApiContext
 from bunq.sdk.context.api_environment_type import ApiEnvironmentType
 from bunq.sdk.context.bunq_context import BunqContext
@@ -33,6 +35,7 @@ from bunq_cli.config import DEFAULT_CONTEXT_PATH
 logger = logging.getLogger(__name__)
 
 DEVICE_DESCRIPTION = "bunq-cli"
+SANDBOX_USER_URL = "https://public-api.sandbox.bunq.com/v1/sandbox-user-person"
 
 
 def _list_cards(params: dict[str, str]) -> Any:
@@ -108,6 +111,38 @@ def destroy_context(context_path: Path | None = None) -> None:
         path.unlink(missing_ok=True)
 
 
+def create_sandbox_user() -> str:
+    """Create a sandbox test user and return its API key."""
+    response = requests.post(
+        SANDBOX_USER_URL,
+        headers={
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            "User-Agent": DEVICE_DESCRIPTION,
+            "X-Bunq-Client-Request-Id": str(uuid.uuid4()),
+            "X-Bunq-Language": "en_US",
+            "X-Bunq-Region": "nl_NL",
+            "X-Bunq-Geolocation": "0 0 0 0 000",
+        },
+        timeout=30,
+    )
+    if not response.ok:
+        raise BunqApiError(f"Creating sandbox user failed ({response.status_code}): {response.text}")
+    return response.json()["Response"][0]["ApiKey"]["api_key"]
+
+
+def _amount(value: str, currency: str) -> dict:
+    return {"value": value, "currency": currency}
+
+
+def _iban(iban: str, name: str) -> dict:
+    return {"type": "IBAN", "value": iban, "name": name}
+
+
+def _name(label: dict | None) -> str | None:
+    return (label or {}).get("display_name")
+
+
 class BunqClient:
     """High-level client wrapping the bunq SDK for CLI use."""
 
@@ -124,6 +159,49 @@ class BunqClient:
     def _log(self, message: str) -> None:
         if self.verbose:
             click.echo(message, err=True)
+
+    # -- Raw API access (the SDK misparses or lacks fields for several endpoints) --
+
+    @staticmethod
+    def _user_path(path: str) -> str:
+        return f"user/{BunqContext.user_context().user_id}/{path}"
+
+    @classmethod
+    def _account_path(cls, path: str, account_id: int | None) -> str:
+        if account_id is None:
+            account_id = BunqContext.user_context().primary_monetary_account.id_
+        return cls._user_path(f"monetary-account/{account_id}/{path}")
+
+    def _call(
+        self,
+        method: str,
+        path: str,
+        body: dict | None = None,
+        params: dict[str, str] | None = None,
+    ) -> list[dict]:
+        """Call the API and return the unwrapped items of the "Response" array."""
+        self._log(f"{method} {path}")
+        api = ApiClient(BunqContext.api_context())
+        if method == "GET":
+            raw = api.get(path, params or {}, {})
+        elif method == "DELETE":
+            raw = api.delete(path, {})
+        else:
+            raw = getattr(api, method.lower())(path, json.dumps(body or {}).encode(), {})
+        if not raw.body_bytes:
+            return []
+        response = json.loads(raw.body_bytes).get("Response", [])
+        return [next(iter(item.values())) for item in response]
+
+    def _create(self, path: str, body: dict) -> int:
+        return self._call("POST", path, body)[0]["id"]
+
+    @staticmethod
+    def _page_params(count: int, older_id: int | None) -> dict[str, str]:
+        params = {"count": str(count)}
+        if older_id is not None:
+            params["older_id"] = str(older_id)
+        return params
 
     # -- Accounts --
 
@@ -421,6 +499,269 @@ class BunqClient:
             "card_limit": (
                 card.card_limit.value if card.card_limit else None
             ),
+            "card_limit_atm": (
+                card.card_limit_atm.value if card.card_limit_atm else None
+            ),
+            "countries": ",".join(
+                p.country for p in (card.country_permission or [])
+            ),
+        }
+
+    # -- Card transactions (mastercard-action) --
+
+    def list_card_transactions(
+        self, account_id: int | None = None, count: int = 25, older_id: int | None = None
+    ) -> list[dict]:
+        path = self._account_path("mastercard-action", account_id)
+        items = self._call("GET", path, params=self._page_params(count, older_id))
+        return [self._card_transaction_to_dict(t) for t in items]
+
+    def get_card_transaction(self, transaction_id: int, account_id: int | None = None) -> dict:
+        path = self._account_path(f"mastercard-action/{transaction_id}", account_id)
+        return self._card_transaction_to_dict(self._call("GET", path)[0])
+
+    @staticmethod
+    def _card_transaction_to_dict(t: dict) -> dict:
+        amount = t.get("amount_billing") or {}
+        return {
+            "id": t.get("id"),
+            "created": t.get("created"),
+            "amount": amount.get("value"),
+            "currency": amount.get("currency"),
+            "merchant": _name(t.get("counterparty_alias")),
+            "city": t.get("city"),
+            "description": t.get("description"),
+            "card_id": t.get("card_id"),
+            "decision": t.get("decision"),
+            "status": t.get("payment_status"),
+        }
+
+    # -- Events --
+
+    def list_events(
+        self, account_id: int | None = None, count: int = 25, older_id: int | None = None
+    ) -> list[dict]:
+        params = self._page_params(count, older_id)
+        if account_id is not None:
+            params["monetary_account_id"] = str(account_id)
+        items = self._call("GET", self._user_path("event"), params=params)
+        return [self._event_to_dict(e) for e in items]
+
+    def get_event(self, event_id: int) -> dict:
+        event = self._call("GET", self._user_path(f"event/{event_id}"))[0]
+        return {**self._event_to_dict(event), "object": event.get("object")}
+
+    @staticmethod
+    def _event_to_dict(e: dict) -> dict:
+        object_type, obj = next(iter((e.get("object") or {"": {}}).items()))
+        return {
+            "id": e.get("id"),
+            "created": e.get("created"),
+            "action": e.get("action"),
+            "object_type": object_type,
+            "object_id": (obj or {}).get("id"),
+            "account_id": e.get("monetary_account_id"),
+            "status": e.get("status"),
+        }
+
+    # -- Statements (customer-statement) --
+
+    def list_statements(self, account_id: int | None = None) -> list[dict]:
+        items = self._call("GET", self._account_path("customer-statement", account_id))
+        return [self._statement_to_dict(s) for s in items]
+
+    def create_statement(
+        self,
+        statement_format: str,
+        date_start: str,
+        date_end: str,
+        regional_format: str | None = None,
+        account_id: int | None = None,
+    ) -> int:
+        body = {
+            "statement_format": statement_format,
+            "date_start": date_start,
+            "date_end": date_end,
+        }
+        if regional_format:
+            body["regional_format"] = regional_format
+        return self._create(self._account_path("customer-statement", account_id), body)
+
+    def download_statement(self, statement_id: int, account_id: int | None = None) -> bytes:
+        path = self._account_path(f"customer-statement/{statement_id}/content", account_id)
+        self._log(f"GET {path}")
+        return ApiClient(BunqContext.api_context()).get(path, {}, {}).body_bytes
+
+    def delete_statement(self, statement_id: int, account_id: int | None = None) -> None:
+        self._call("DELETE", self._account_path(f"customer-statement/{statement_id}", account_id))
+
+    @staticmethod
+    def _statement_to_dict(s: dict) -> dict:
+        return {
+            "id": s.get("id"),
+            "created": s.get("created"),
+            "date_start": s.get("date_start"),
+            "date_end": s.get("date_end"),
+            "format": s.get("statement_format"),
+            "regional_format": s.get("regional_format"),
+            "status": s.get("status"),
+        }
+
+    # -- Scheduled payments --
+
+    def list_scheduled_payments(self, account_id: int | None = None) -> list[dict]:
+        items = self._call("GET", self._account_path("schedule-payment", account_id))
+        return [self._scheduled_payment_to_dict(s) for s in items]
+
+    def get_scheduled_payment(self, schedule_id: int, account_id: int | None = None) -> dict:
+        path = self._account_path(f"schedule-payment/{schedule_id}", account_id)
+        return self._scheduled_payment_to_dict(self._call("GET", path)[0])
+
+    def create_scheduled_payment(
+        self,
+        amount: str,
+        currency: str,
+        recipient_iban: str,
+        recipient_name: str,
+        description: str,
+        time_start: str,
+        recurrence_unit: str,
+        recurrence_size: int,
+        time_end: str | None = None,
+        account_id: int | None = None,
+    ) -> int:
+        schedule = {
+            "time_start": time_start,
+            "recurrence_unit": recurrence_unit,
+            "recurrence_size": recurrence_size,
+        }
+        if time_end:
+            schedule["time_end"] = time_end
+        body = {
+            "payment": {
+                "amount": _amount(amount, currency),
+                "counterparty_alias": _iban(recipient_iban, recipient_name),
+                "description": description,
+            },
+            "schedule": schedule,
+        }
+        return self._create(self._account_path("schedule-payment", account_id), body)
+
+    def cancel_scheduled_payment(self, schedule_id: int, account_id: int | None = None) -> None:
+        self._call("DELETE", self._account_path(f"schedule-payment/{schedule_id}", account_id))
+
+    @staticmethod
+    def _scheduled_payment_to_dict(s: dict) -> dict:
+        payment = s.get("payment") or {}
+        schedule = s.get("schedule") or {}
+        amount = payment.get("amount") or {}
+        return {
+            "id": s.get("id"),
+            "status": s.get("status"),
+            "amount": amount.get("value"),
+            "currency": amount.get("currency"),
+            "counterparty": _name(payment.get("counterparty_alias")),
+            "description": payment.get("description"),
+            "every": f"{schedule.get('recurrence_size')} {schedule.get('recurrence_unit')}",
+            "next": schedule.get("time_next"),
+            "start": schedule.get("time_start"),
+            "end": schedule.get("time_end"),
+        }
+
+    # -- Draft payments --
+
+    def list_draft_payments(self, account_id: int | None = None) -> list[dict]:
+        items = self._call("GET", self._account_path("draft-payment", account_id))
+        return [self._draft_payment_to_dict(d) for d in items]
+
+    def get_draft_payment(self, draft_id: int, account_id: int | None = None) -> dict:
+        path = self._account_path(f"draft-payment/{draft_id}", account_id)
+        return self._draft_payment_to_dict(self._call("GET", path)[0])
+
+    def create_draft_payment(
+        self,
+        amount: str,
+        currency: str,
+        recipient_iban: str,
+        recipient_name: str,
+        description: str,
+        account_id: int | None = None,
+    ) -> int:
+        body = {
+            "entries": [
+                {
+                    "amount": _amount(amount, currency),
+                    "counterparty_alias": _iban(recipient_iban, recipient_name),
+                    "description": description,
+                }
+            ],
+            "number_of_required_accepts": 1,
+        }
+        return self._create(self._account_path("draft-payment", account_id), body)
+
+    def reject_draft_payment(self, draft_id: int, account_id: int | None = None) -> None:
+        path = self._account_path(f"draft-payment/{draft_id}", account_id)
+        updated = self._call("GET", path)[0]["updated"]
+        self._call("PUT", path, {"status": "REJECTED", "previous_updated_timestamp": updated})
+
+    @staticmethod
+    def _draft_payment_to_dict(d: dict) -> dict:
+        entries = d.get("entries") or [{}]
+        amount = entries[0].get("amount") or {}
+        return {
+            "id": d.get("id"),
+            "created": d.get("created"),
+            "status": d.get("status"),
+            "amount": amount.get("value"),
+            "currency": amount.get("currency"),
+            "counterparty": _name(entries[0].get("counterparty_alias")),
+            "description": entries[0].get("description"),
+            "entries": len(d.get("entries") or []),
+        }
+
+    # -- bunq.me tabs --
+
+    def list_bunqme_tabs(self, account_id: int | None = None) -> list[dict]:
+        items = self._call("GET", self._account_path("bunqme-tab", account_id))
+        return [self._bunqme_tab_to_dict(t) for t in items]
+
+    def get_bunqme_tab(self, tab_id: int, account_id: int | None = None) -> dict:
+        path = self._account_path(f"bunqme-tab/{tab_id}", account_id)
+        return self._bunqme_tab_to_dict(self._call("GET", path)[0])
+
+    def create_bunqme_tab(
+        self,
+        amount: str,
+        currency: str,
+        description: str,
+        redirect_url: str | None = None,
+        account_id: int | None = None,
+    ) -> dict:
+        entry = {"amount_inquired": _amount(amount, currency), "description": description}
+        if redirect_url:
+            entry["redirect_url"] = redirect_url
+        tab_id = self._create(
+            self._account_path("bunqme-tab", account_id), {"bunqme_tab_entry": entry}
+        )
+        return self.get_bunqme_tab(tab_id, account_id)
+
+    def cancel_bunqme_tab(self, tab_id: int, account_id: int | None = None) -> None:
+        path = self._account_path(f"bunqme-tab/{tab_id}", account_id)
+        self._call("PUT", path, {"status": "CANCELLED"})
+
+    @staticmethod
+    def _bunqme_tab_to_dict(t: dict) -> dict:
+        entry = t.get("bunqme_tab_entry") or {}
+        amount = entry.get("amount_inquired") or {}
+        return {
+            "id": t.get("id"),
+            "created": t.get("created"),
+            "status": t.get("status"),
+            "amount": amount.get("value"),
+            "currency": amount.get("currency"),
+            "description": entry.get("description"),
+            "url": t.get("bunqme_tab_share_url"),
+            "expires": t.get("time_expiry"),
         }
 
     # -- Callbacks (notification filters) --
@@ -464,3 +805,22 @@ class BunqClient:
             "category": f.category,
             "notification_target": f.notification_target,
         }
+
+    def list_callback_failures(self) -> list[dict]:
+        items = self._call("GET", self._user_path("notification-filter-failure"))
+        return [
+            {
+                "id": f.get("id"),
+                "created": f.get("created"),
+                "category": f.get("category"),
+                "event_type": f.get("event_type"),
+                "object_id": f.get("object_id"),
+                "response_code": f.get("response_code"),
+                "error": f.get("exception_message"),
+            }
+            for f in items
+        ]
+
+    def retry_callback_failures(self, failure_ids: list[int]) -> None:
+        body = {"notification_filter_failed_ids": ",".join(map(str, failure_ids))}
+        self._call("POST", self._user_path("notification-filter-failure"), body)

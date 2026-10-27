@@ -29,11 +29,20 @@ bunq cards unfreeze 12345
 
 ### Spending limits
 
-Update the daily spending limit:
+Update the daily spending and ATM limits:
 
 ```bash
 bunq cards update 12345 --daily-limit 500.00
+bunq cards update 12345 --atm-limit 250.00
 ```
+
+### PIN code
+
+```bash
+bunq cards update 12345 --change-pin
+```
+
+You'll be prompted for the new PIN, so it doesn't end up in your shell history.
 
 ### Linked accounts
 

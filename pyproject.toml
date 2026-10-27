@@ -1,10 +1,11 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+# setuptools 77+ for the SPDX `license` string; setuptools-scm takes the version from the git tag.
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "bunq-cli"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Command-line interface for the Bunq API"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,6 +28,7 @@ classifiers = [
 dependencies = [
     "click>=8.1",
     "bunq-sdk>=1.28",
+    "requests>=2.24",
     "tabulate>=0.9",
 ]
 
@@ -45,3 +47,5 @@ bunq = "bunq_cli.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools_scm]

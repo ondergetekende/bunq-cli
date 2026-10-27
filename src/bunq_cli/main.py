@@ -122,7 +122,7 @@ def _run_for_all_profiles(ctx: Context) -> None:
 
 
 @click.group(cls=_CliGroup)
-@click.version_option(version="0.1.0", prog_name="bunq")
+@click.version_option(package_name="bunq-cli", prog_name="bunq")
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("-q", "--quiet", is_flag=True, help="Suppress all output except errors.")
 @click.option("--token", metavar="TOKEN", help="API token (overrides stored credentials).")

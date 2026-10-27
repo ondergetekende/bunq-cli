@@ -12,7 +12,7 @@ from bunq_cli.main import cli
 def test_version(cli_runner):
     result = cli_runner("--version")
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert "bunq, version" in result.output
 
 
 def test_help(cli_runner):

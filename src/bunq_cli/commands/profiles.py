@@ -12,7 +12,7 @@ from bunq_cli.config import (
     save_config,
     validate_profile_name,
 )
-from bunq_cli.main import Context, pass_context
+from bunq_cli.main import Context, complete_profile, pass_context
 from bunq_cli.output import echo_output
 
 
@@ -42,7 +42,7 @@ def list_profiles(ctx: Context) -> None:
 
 
 @profiles.command("use")
-@click.argument("name")
+@click.argument("name", shell_complete=complete_profile)
 @pass_context
 def use_profile(ctx: Context, name: str) -> None:
     """Set the default profile."""
@@ -55,7 +55,7 @@ def use_profile(ctx: Context, name: str) -> None:
 
 
 @profiles.command("rename")
-@click.argument("old")
+@click.argument("old", shell_complete=complete_profile)
 @click.argument("new")
 @pass_context
 def rename_profile(ctx: Context, old: str, new: str) -> None:
@@ -76,7 +76,7 @@ def rename_profile(ctx: Context, old: str, new: str) -> None:
 
 
 @profiles.command("set")
-@click.argument("name")
+@click.argument("name", shell_complete=complete_profile)
 @click.option("--read-only/--read-write", default=None, help="Block or allow commands that change data.")
 @pass_context
 def set_profile_options(ctx: Context, name: str, read_only: bool | None) -> None:

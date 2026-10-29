@@ -17,7 +17,7 @@ from bunq_cli.config import (
 from bunq_cli.output import format_output
 
 # Commands that manage profiles/credentials themselves and make no sense per profile.
-SINGLE_PROFILE_COMMANDS = {"login", "logout", "profiles", "sandbox", "oauth-client"}
+SINGLE_PROFILE_COMMANDS = {"login", "logout", "profiles", "sandbox", "oauth-client", "completion"}
 
 
 class Context:
@@ -121,6 +121,15 @@ def _run_for_all_profiles(ctx: Context) -> None:
     click_ctx.exit(1 if failed else 0)
 
 
+def complete_profile(ctx: click.Context, param: click.Parameter, incomplete: str) -> list[str]:
+    config_path = ctx.find_root().params.get("config_path") or DEFAULT_CONFIG_PATH
+    try:
+        profiles = load_config(config_path).get("profiles", {})
+    except Exception:  # never break the shell over a bad config
+        return []
+    return [name for name in profiles if name.startswith(incomplete)]
+
+
 @click.group(cls=_CliGroup)
 @click.version_option(package_name="bunq-cli", prog_name="bunq")
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output.")
@@ -142,7 +151,14 @@ def _run_for_all_profiles(ctx: Context) -> None:
     help="Custom config file path.",
 )
 @click.option("--sandbox", is_flag=True, help="Use the sandbox environment.")
-@click.option("-p", "--profile", envvar="BUNQ_PROFILE", default=None, help="Profile (client) to use. Env: BUNQ_PROFILE.")
+@click.option(
+    "-p",
+    "--profile",
+    envvar="BUNQ_PROFILE",
+    default=None,
+    shell_complete=complete_profile,
+    help="Profile (client) to use. Env: BUNQ_PROFILE.",
+)
 @click.option("--all-profiles", is_flag=True, help="Run a read-only command for every profile.")
 @pass_context
 def cli(
@@ -175,6 +191,23 @@ def cli(
         ctx.profile = ctx.loop_profile
     if all_profiles and ctx.loop_profile is None:
         _run_for_all_profiles(ctx)
+
+
+@cli.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completion(shell: str) -> None:
+    """Print the shell completion script for SHELL.
+
+    \b
+    Install it with:
+      bash:  echo 'eval "$(bunq completion bash)"' >> ~/.bashrc
+      zsh:   echo 'eval "$(bunq completion zsh)"' >> ~/.zshrc
+      fish:  bunq completion fish > ~/.config/fish/completions/bunq.fish
+    """
+    from click.shell_completion import get_completion_class
+
+    comp_cls = get_completion_class(shell)
+    click.echo(comp_cls(cli, {}, "bunq", "_BUNQ_COMPLETE").source())
 
 
 # Register commands

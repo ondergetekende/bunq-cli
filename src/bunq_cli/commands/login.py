@@ -17,7 +17,7 @@ from bunq_cli.config import (
     set_profile,
     validate_profile_name,
 )
-from bunq_cli.main import Context, pass_context
+from bunq_cli.main import Context, complete_profile, pass_context
 from bunq_cli.oauth import oauth_login
 
 
@@ -112,7 +112,7 @@ def login(
 
 
 @click.command()
-@click.option("--profile", "profile_name", default=None, help="Profile to log out (default: the selected profile).")
+@click.option("--profile", "profile_name", default=None, shell_complete=complete_profile, help="Profile to log out (default: the selected profile).")
 @click.option("--all", "all_profiles", is_flag=True, help="Log out of every profile.")
 @pass_context
 def logout(ctx: Context, profile_name: str | None, all_profiles: bool) -> None:
